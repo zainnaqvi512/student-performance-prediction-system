@@ -1,0 +1,10 @@
+.venv/
+.git/
+.pytest_cache/
+__pycache__/
+instance/
+tests/
+*.pptx
+README.md
+render.yaml
+.env.local
