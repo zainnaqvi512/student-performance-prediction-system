@@ -4,6 +4,12 @@ A working Flask implementation of the supplied final-year project presentation. 
 
 Live demo: <https://student-performance-prediction-syst-one.vercel.app/>. It runs on Vercel Hobby with a free Render PostgreSQL database. The current free database expires on **28 October 2026**; export or migrate its data before then to keep accounts and records. Deployment API keys are stored only in the local, ignored `.env.local` file.
 
+## Accounts and admin
+
+Teachers sign up at `/register` and sign in at `/login`. Each teacher sees only their own students, training data, and reports. A new workspace starts with clearly labeled sample students and an illustrative model.
+
+The separate admin sign-in is at `/admin/login`. Admin credentials come from `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` environment variables; the admin route is unavailable until both are configured. The admin console lists teacher workspaces, shows each user's student portfolio and prediction summary, and can create a demo teacher workspace or add six labeled sample students to a selected workspace. Sample generation does not replace existing records or retrain the user's model. The generated demo teacher password is displayed to the admin once.
+
 ## Run locally
 
 ```bash

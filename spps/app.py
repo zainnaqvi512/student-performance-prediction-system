@@ -53,6 +53,14 @@ POSTGRES_SCHEMA = (SCHEMA.replace(" id INTEGER PRIMARY KEY", " id BIGSERIAL PRIM
                    .replace("user_id INTEGER PRIMARY KEY", "user_id BIGINT PRIMARY KEY")
                    .replace("model_blob BLOB", "model_blob BYTEA"))
 INTEGRITY_ERRORS = (sqlite3.IntegrityError, psycopg.IntegrityError)
+DEMO_STUDENTS = [
+    (101, "Ayesha Khan", "Computer Science", 94, 88, 91, 86, 84),
+    (102, "Bilal Ahmed", "Software Engineering", 67, 60, 70, 58, 62),
+    (103, "Fatima Ali", "Computer Science", 48, 40, 42, 36, 51),
+    (104, "Hamza Malik", "Information Technology", 82, 74, 80, 77, 72),
+    (105, "Maryam Raza", "Software Engineering", 96, 90, 92, 93, 88),
+    (106, "Omar Farooq", "Information Technology", 56, 52, 48, 43, 58),
+]
 
 
 class PostgresConnection:
@@ -101,6 +109,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         SECRET_KEY=os.environ.get("SECRET_KEY") or key_file.read_text(),
         DATABASE=str(instance / "student_performance.sqlite3"),
         DATABASE_URL=os.environ.get("DATABASE_URL"),
+        ADMIN_EMAIL=os.environ.get("ADMIN_EMAIL", "").strip().lower(),
+        ADMIN_PASSWORD_HASH=os.environ.get("ADMIN_PASSWORD_HASH", ""),
         MAX_CONTENT_LENGTH=2 * 1024 * 1024,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
@@ -146,6 +156,7 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.before_request
     def load_user_and_check_csrf():
         g.user = None
+        g.admin = bool(session.get("admin") and app.config["ADMIN_EMAIL"] and app.config["ADMIN_PASSWORD_HASH"])
         if session.get("user_id"):
             g.user = db().execute("SELECT id, name, email FROM users WHERE id = ?", (session["user_id"],)).fetchone()
             if g.user is None:
@@ -160,7 +171,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     def shared_template_values():
         if "csrf_token" not in session:
             session["csrf_token"] = secrets.token_urlsafe(32)
-        return {"csrf_token": session["csrf_token"], "current_user": g.get("user"), "risk_level": risk_level}
+        return {"csrf_token": session["csrf_token"], "current_user": g.get("user"),
+                "current_admin": g.get("admin", False), "admin_email": app.config["ADMIN_EMAIL"],
+                "risk_level": risk_level}
 
     def login_required(view):
         @wraps(view)
@@ -170,14 +183,22 @@ def create_app(test_config: dict | None = None) -> Flask:
             return view(*args, **kwargs)
         return wrapped
 
-    def get_model():
-        row = db().execute("SELECT model_blob FROM model_runs WHERE user_id = ?", (g.user["id"],)).fetchone()
+    def admin_required(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not g.admin:
+                return redirect(url_for("admin_login"))
+            return view(*args, **kwargs)
+        return wrapped
+
+    def get_model(user_id: int | None = None):
+        row = db().execute("SELECT model_blob FROM model_runs WHERE user_id = ?", (user_id or g.user["id"],)).fetchone()
         return joblib.load(io.BytesIO(bytes(row["model_blob"]))) if row and row["model_blob"] else None
 
-    def model_run():
+    def model_run(user_id: int | None = None):
         row = db().execute(
             "SELECT user_id,selected_model,metrics_json,sample_count,test_count,data_source,trained_at FROM model_runs WHERE user_id = ?",
-            (g.user["id"],),
+            (user_id or g.user["id"],),
         ).fetchone()
         if row is None:
             return None
@@ -200,6 +221,13 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         db().commit()
 
+    def add_demo_students(user_id: int, prefix: str):
+        db().executemany(
+            """INSERT INTO students(user_id,student_number,name,program,attendance,quiz_score,assignment_score,midterm_score,previous_score,is_demo,created_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+            [(user_id, f"{prefix}-{number}", *details, 1, now()) for number, *details in DEMO_STUDENTS],
+        )
+
     def seed_demo(user_id: int):
         frame = demo_frame()
         db().executemany(
@@ -207,19 +235,7 @@ def create_app(test_config: dict | None = None) -> Flask:
                VALUES(?,?,?,?,?,?,?,?)""",
             [(user_id, *row, "demo") for row in frame.itertuples(index=False, name=None)],
         )
-        examples = [
-            ("ST-101", "Ayesha Khan", "Computer Science", 94, 88, 91, 86, 84),
-            ("ST-102", "Bilal Ahmed", "Software Engineering", 67, 60, 70, 58, 62),
-            ("ST-103", "Fatima Ali", "Computer Science", 48, 40, 42, 36, 51),
-            ("ST-104", "Hamza Malik", "Information Technology", 82, 74, 80, 77, 72),
-            ("ST-105", "Maryam Raza", "Software Engineering", 96, 90, 92, 93, 88),
-            ("ST-106", "Omar Farooq", "Information Technology", 56, 52, 48, 43, 58),
-        ]
-        db().executemany(
-            """INSERT INTO students(user_id,student_number,name,program,attendance,quiz_score,assignment_score,midterm_score,previous_score,is_demo,created_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-            [(user_id, *row, 1, now()) for row in examples],
-        )
+        add_demo_students(user_id, "ST")
         train_and_save(user_id, frame, "demo")
 
     def own_student(student_id: int):
@@ -249,9 +265,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             values[field] = value
         return values
 
-    def student_results():
-        students = db().execute("SELECT * FROM students WHERE user_id = ? ORDER BY name", (g.user["id"],)).fetchall()
-        model = get_model()
+    def student_results(user_id: int | None = None):
+        owner_id = user_id or g.user["id"]
+        students = db().execute("SELECT * FROM students WHERE user_id = ? ORDER BY name", (owner_id,)).fetchall()
+        model = get_model(owner_id)
         results = []
         for student in students:
             item = dict(student)
@@ -262,10 +279,14 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.get("/")
     def index():
+        if g.admin:
+            return redirect(url_for("admin_dashboard"))
         return redirect(url_for("dashboard")) if g.user else render_template("landing.html")
 
     @app.route("/register", methods=["GET", "POST"])
     def register():
+        if g.admin:
+            return redirect(url_for("admin_dashboard"))
         if g.user:
             return redirect(url_for("dashboard"))
         if request.method == "POST":
@@ -294,6 +315,8 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
+        if g.admin:
+            return redirect(url_for("admin_dashboard"))
         if g.user:
             return redirect(url_for("dashboard"))
         if request.method == "POST":
@@ -312,6 +335,99 @@ def create_app(test_config: dict | None = None) -> Flask:
     def logout():
         session.clear()
         return redirect(url_for("index"))
+
+    @app.route("/admin/login", methods=["GET", "POST"])
+    def admin_login():
+        if not app.config["ADMIN_EMAIL"] or not app.config["ADMIN_PASSWORD_HASH"]:
+            abort(404)
+        if g.admin:
+            return redirect(url_for("admin_dashboard"))
+        if g.user:
+            return redirect(url_for("dashboard"))
+        if request.method == "POST":
+            email = request.form.get("email", "").strip().lower()
+            password = request.form.get("password", "")
+            if (secrets.compare_digest(email, app.config["ADMIN_EMAIL"])
+                    and check_password_hash(app.config["ADMIN_PASSWORD_HASH"], password)):
+                session.clear()
+                session["admin"] = True
+                session["csrf_token"] = secrets.token_urlsafe(32)
+                return redirect(url_for("admin_dashboard"))
+            flash("Admin email or password is incorrect.", "error")
+        return render_template("admin_login.html")
+
+    @app.post("/admin/logout")
+    @admin_required
+    def admin_logout():
+        session.clear()
+        return redirect(url_for("index"))
+
+    @app.get("/admin")
+    @admin_required
+    def admin_dashboard():
+        rows = db().execute(
+            """SELECT u.id,u.name,u.email,u.created_at,COUNT(s.id) AS student_count,
+                      SUM(CASE WHEN s.is_demo = 1 THEN 1 ELSE 0 END) AS demo_count,
+                      m.selected_model,m.data_source
+               FROM users u LEFT JOIN students s ON s.user_id = u.id
+               LEFT JOIN model_runs m ON m.user_id = u.id
+               GROUP BY u.id,u.name,u.email,u.created_at,m.selected_model,m.data_source
+               ORDER BY u.id DESC"""
+        ).fetchall()
+        users = [dict(row) | {"is_demo": row["email"].endswith("@example.invalid")} for row in rows]
+        query = request.args.get("q", "").strip().lower()[:100]
+        visible_users = [user for user in users if query in user["name"].lower() or query in user["email"].lower()]
+        return render_template("admin_dashboard.html", users=visible_users, query=query, user_count=len(users),
+                               student_count=sum(row["student_count"] for row in users),
+                               demo_count=sum(row["is_demo"] for row in users))
+
+    @app.post("/admin/demo-workspaces")
+    @admin_required
+    def admin_create_demo():
+        email = f"demo-{secrets.token_hex(5)}@example.invalid"
+        password = secrets.token_urlsafe(14)
+        try:
+            user_id = db().execute(
+                "INSERT INTO users(name,email,password_hash,created_at) VALUES(?,?,?,?) RETURNING id",
+                ("Demo Teacher", email, generate_password_hash(password), now()),
+            ).fetchone()["id"]
+            seed_demo(user_id)
+        except INTEGRITY_ERRORS:
+            db().rollback()
+            flash("Could not create the demo workspace. Please try again.", "error")
+            return redirect(url_for("admin_dashboard"))
+        flash(f"Demo workspace ready. Sign in as {email} with password {password}. Copy these details now; the password is shown only once.", "success")
+        return redirect(url_for("admin_user", user_id=user_id))
+
+    @app.get("/admin/users/<int:user_id>")
+    @admin_required
+    def admin_user(user_id):
+        row = db().execute("SELECT id,name,email,created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            abort(404)
+        user = dict(row) | {"is_demo": row["email"].endswith("@example.invalid")}
+        students = student_results(user_id)
+        run = model_run(user_id)
+        counts = {label: sum(student["risk"] == label for student in students) for label in LABELS}
+        predicted = [student["predicted_score"] for student in students if student["predicted_score"] is not None]
+        average = round(sum(predicted) / len(predicted), 1) if predicted else None
+        return render_template("admin_user.html", user=user, students=students, run=run,
+                               counts=counts, average=average)
+
+    @app.post("/admin/users/<int:user_id>/demo-students")
+    @admin_required
+    def admin_add_demo_students(user_id):
+        if db().execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone() is None:
+            abort(404)
+        try:
+            add_demo_students(user_id, f"D{secrets.token_hex(3).upper()}")
+            db().commit()
+        except INTEGRITY_ERRORS:
+            db().rollback()
+            flash("Could not add sample students. Please try again.", "error")
+            return redirect(url_for("admin_user", user_id=user_id))
+        flash("Six sample students were added. Existing records and model training were kept.", "success")
+        return redirect(url_for("admin_user", user_id=user_id))
 
     @app.get("/dashboard")
     @login_required

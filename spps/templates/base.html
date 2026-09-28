@@ -7,26 +7,31 @@
   <title>{% block title %}SPPS{% endblock %} · Student Performance</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body class="{% if current_user %}app-body{% else %}public-body{% endif %}">
-{% if current_user %}
+<body class="{% if current_user or current_admin %}app-body{% else %}public-body{% endif %}">
+{% if current_user or current_admin %}
   <div class="app-shell">
     <aside class="sidebar" id="sidebar">
-      <a class="brand" href="{{ url_for('dashboard') }}" aria-label="SPPS dashboard"><span class="brand-mark">S<span>.</span></span><span class="brand-copy"><strong>SPPS</strong><small>ACADEMIC INTELLIGENCE</small></span></a>
-      <div class="side-label">WORKSPACE</div>
+      <a class="brand" href="{{ url_for('admin_dashboard' if current_admin else 'dashboard') }}" aria-label="SPPS dashboard"><span class="brand-mark">S<span>.</span></span><span class="brand-copy"><strong>SPPS</strong><small>{{ 'ADMIN CONSOLE' if current_admin else 'ACADEMIC INTELLIGENCE' }}</small></span></a>
+      <div class="side-label">{{ 'ADMINISTRATION' if current_admin else 'WORKSPACE' }}</div>
       <nav class="side-nav" aria-label="Main navigation">
+        {% if current_admin %}
+        <a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}"><span class="nav-icon">▦</span> All workspaces</a>
+        {% if request.endpoint in ['admin_user', 'admin_add_demo_students'] %}<a href="{{ request.path }}" class="active"><span class="nav-icon">♙</span> User portfolio</a>{% endif %}
+        {% else %}
         <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}"><span class="nav-icon">▦</span> Overview</a>
         <a href="{{ url_for('students') }}" class="{% if request.endpoint in ['students', 'add_student', 'student_detail', 'edit_student'] %}active{% endif %}"><span class="nav-icon">♙</span> Students</a>
         <a href="{{ url_for('training') }}" class="{% if request.endpoint in ['training', 'upload_training', 'retrain'] %}active{% endif %}"><span class="nav-icon">◈</span> Model training</a>
         <a href="{{ url_for('reports') }}" class="{% if request.endpoint == 'reports' %}active{% endif %}"><span class="nav-icon">▤</span> Reports</a>
+        {% endif %}
       </nav>
       <div class="sidebar-bottom">
-        <div class="side-help"><span class="side-help-icon">✦</span><strong>Make every score count.</strong><p>Spot students who may need support before final results arrive.</p></div>
-        <div class="side-profile"><span class="avatar">{{ current_user['name'][0]|upper }}</span><span><strong>{{ current_user['name'] }}</strong><small>{{ current_user['email'] }}</small></span></div>
-        <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="logout-btn" type="submit">Sign out <span>↗</span></button></form>
+        <div class="side-help"><span class="side-help-icon">✦</span><strong>{{ 'See every workspace.' if current_admin else 'Make every score count.' }}</strong><p>{{ 'Review users and generate clearly marked sample data.' if current_admin else 'Spot students who may need support before final results arrive.' }}</p></div>
+        <div class="side-profile"><span class="avatar">{{ 'A' if current_admin else current_user['name'][0]|upper }}</span><span><strong>{{ 'Administrator' if current_admin else current_user['name'] }}</strong><small>{{ admin_email if current_admin else current_user['email'] }}</small></span></div>
+        <form method="post" action="{{ url_for('admin_logout' if current_admin else 'logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="logout-btn" type="submit">Sign out <span>↗</span></button></form>
       </div>
     </aside>
     <div class="workspace">
-      <header class="topbar"><button class="menu-toggle" type="button" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">☰</button><div class="breadcrumb">WORKSPACE <span>/</span> {% block breadcrumb %}OVERVIEW{% endblock %}</div><div class="topbar-right"><span class="status-dot"></span> System ready <span class="top-avatar">{{ current_user['name'][0]|upper }}</span></div></header>
+      <header class="topbar"><button class="menu-toggle" type="button" aria-label="Open menu" aria-controls="sidebar" aria-expanded="false">☰</button><div class="breadcrumb">{{ 'ADMIN' if current_admin else 'WORKSPACE' }} <span>/</span> {% block breadcrumb %}OVERVIEW{% endblock %}</div><div class="topbar-right"><span class="status-dot"></span> System ready <span class="top-avatar">{{ 'A' if current_admin else current_user['name'][0]|upper }}</span></div></header>
       <main class="main-content">
         {% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-stack" role="status">{% for category,message in messages %}<div class="flash {{ category }}">{{ message }}<button type="button" aria-label="Dismiss message" onclick="this.parentElement.remove()">×</button></div>{% endfor %}</div>{% endif %}{% endwith %}
         {% block content %}{% endblock %}

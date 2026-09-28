@@ -4,6 +4,7 @@ import pytest
 
 from spps import create_app
 from spps.ml import demo_frame
+from werkzeug.security import generate_password_hash
 
 
 @pytest.fixture
@@ -14,6 +15,8 @@ def app(tmp_path):
         "DATABASE": str(tmp_path / "test.sqlite3"),
         "DATABASE_URL": None,
         "SECRET_KEY": "test-secret",
+        "ADMIN_EMAIL": "admin@example.edu",
+        "ADMIN_PASSWORD_HASH": generate_password_hash("admin-test-password"),
     })
 
 
@@ -112,3 +115,45 @@ def test_auth_csrf_and_account_isolation(app):
     assert second.post(f"/students/{owned_by_first}/delete", data={"csrf_token": csrf(second)}).status_code == 404
     first.post("/logout", data={"csrf_token": csrf(first)})
     assert first.get("/dashboard").status_code == 302
+    first.get("/login")
+    signed_in = first.post("/login", data={
+        "csrf_token": csrf(first), "email": "a@example.edu", "password": "securepass123",
+    }, follow_redirects=True)
+    assert b"Good to see you, Teacher" in signed_in.data
+
+
+def test_admin_login_portfolios_and_demo_generation(app):
+    teacher = app.test_client()
+    admin = app.test_client()
+    register(teacher, "Teacher One", "teacher@example.edu")
+
+    assert admin.get("/admin").location.endswith("/admin/login")
+    assert teacher.get("/admin").location.endswith("/admin/login")
+    admin.get("/admin/login")
+    wrong = admin.post("/admin/login", data={
+        "csrf_token": csrf(admin), "email": "admin@example.edu", "password": "wrong-password",
+    }, follow_redirects=True)
+    assert b"incorrect" in wrong.data
+    signed_in = admin.post("/admin/login", data={
+        "csrf_token": csrf(admin), "email": "admin@example.edu", "password": "admin-test-password",
+    }, follow_redirects=True)
+    assert b"All workspaces" in signed_in.data
+    assert b"Teacher One" in signed_in.data
+    assert admin.get("/dashboard").location.endswith("/login")
+    assert admin.get("/admin/users/1").status_code == 200
+    assert b"Ayesha Khan" in admin.get("/admin/users/1").data
+
+    response = admin.post("/admin/users/1/demo-students", data={"csrf_token": csrf(admin)}, follow_redirects=True)
+    assert b"Six sample students were added" in response.data
+    assert b"12 total" in response.data
+    assert teacher.get("/students").data.count(b"Ayesha Khan") >= 2
+
+    response = admin.post("/admin/demo-workspaces", data={"csrf_token": csrf(admin)}, follow_redirects=True)
+    assert b"Demo workspace ready" in response.data
+    assert b"Demo Teacher" in response.data
+    assert b"demo-" in response.data
+    assert b"Demo Teacher" in admin.get("/admin").data
+    assert teacher.get("/admin/users/2").location.endswith("/admin/login")
+
+    admin.post("/admin/logout", data={"csrf_token": csrf(admin)})
+    assert admin.get("/admin").location.endswith("/admin/login")
