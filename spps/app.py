@@ -54,12 +54,34 @@ POSTGRES_SCHEMA = (SCHEMA.replace(" id INTEGER PRIMARY KEY", " id BIGSERIAL PRIM
                    .replace("model_blob BLOB", "model_blob BYTEA"))
 INTEGRITY_ERRORS = (sqlite3.IntegrityError, psycopg.IntegrityError)
 DEMO_STUDENTS = [
-    (101, "Ayesha Khan", "Computer Science", 94, 88, 91, 86, 84),
-    (102, "Bilal Ahmed", "Software Engineering", 67, 60, 70, 58, 62),
-    (103, "Fatima Ali", "Computer Science", 48, 40, 42, 36, 51),
-    (104, "Hamza Malik", "Information Technology", 82, 74, 80, 77, 72),
-    (105, "Maryam Raza", "Software Engineering", 96, 90, 92, 93, 88),
-    (106, "Omar Farooq", "Information Technology", 56, 52, 48, 43, 58),
+    (101, "Ayesha Khan", "Computer Science", 94, 88, 91, 86, 84, 87),
+    (102, "Bilal Ahmed", "Software Engineering", 67, 60, 70, 58, 62, 63),
+    (103, "Fatima Ali", "Computer Science", 48, 40, 42, 36, 51, 42),
+    (104, "Hamza Malik", "Information Technology", 82, 74, 80, 77, 72, 76),
+    (105, "Maryam Raza", "Software Engineering", 96, 90, 92, 93, 88, 93),
+    (106, "Omar Farooq", "Information Technology", 56, 52, 48, 43, 58, 49),
+]
+DEMO_WORKSPACES = [
+    ("Sara Ali", "showcase-sara@example.invalid", "Computer Science", [
+        ("Hira Noor", 95, 91, 89, 88, 90, 91), ("Talha Qureshi", 76, 72, 78, 69, 75, 73),
+        ("Amina Yousaf", 84, 79, 86, 82, 80, 83), ("Daniyal Shah", 54, 49, 56, 45, 52, 48),
+        ("Zoya Mir", 98, 94, 96, 92, 93, 95), ("Rehan Aslam", 68, 64, 70, 61, 66, 65),
+    ]),
+    ("Hassan Raza", "showcase-hassan@example.invalid", "Software Engineering", [
+        ("Ali Hamza", 88, 82, 85, 79, 83, 82), ("Eman Khalid", 91, 89, 93, 87, 90, 90),
+        ("Faris Mahmood", 63, 58, 66, 55, 60, 59), ("Noor Fatima", 78, 73, 80, 75, 76, 77),
+        ("Adeel Tariq", 47, 44, 50, 39, 46, 43), ("Maham Asif", 83, 79, 84, 81, 80, 82),
+    ]),
+    ("Mehwish Khan", "showcase-mehwish@example.invalid", "Business Analytics", [
+        ("Sidra Nadeem", 82, 77, 81, 74, 79, 78), ("Usman Akbar", 71, 69, 73, 65, 67, 68),
+        ("Laiba Iqbal", 96, 92, 95, 90, 93, 93), ("Rameez Butt", 51, 46, 49, 42, 48, 45),
+        ("Iman Zafar", 87, 82, 88, 84, 85, 86), ("Saad Javed", 66, 61, 64, 57, 62, 61),
+    ]),
+    ("Farhan Ahmed", "showcase-farhan@example.invalid", "Information Technology", [
+        ("Mahnoor Siddiqui", 90, 86, 89, 83, 87, 86), ("Bilal Naeem", 62, 59, 65, 54, 61, 58),
+        ("Saba Hussain", 79, 76, 83, 71, 78, 76), ("Ahmad Saeed", 73, 70, 72, 67, 69, 69),
+        ("Nimra Saleem", 94, 90, 93, 89, 91, 91), ("Waqas Mirza", 45, 41, 47, 35, 43, 40),
+    ]),
 ]
 
 
@@ -221,21 +243,21 @@ def create_app(test_config: dict | None = None) -> Flask:
         )
         db().commit()
 
-    def add_demo_students(user_id: int, prefix: str):
+    def add_demo_students(user_id: int, prefix: str, examples=DEMO_STUDENTS):
         db().executemany(
-            """INSERT INTO students(user_id,student_number,name,program,attendance,quiz_score,assignment_score,midterm_score,previous_score,is_demo,created_at)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-            [(user_id, f"{prefix}-{number}", *details, 1, now()) for number, *details in DEMO_STUDENTS],
+            """INSERT INTO students(user_id,student_number,name,program,attendance,quiz_score,assignment_score,midterm_score,previous_score,actual_final_score,is_demo,created_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+            [(user_id, f"{prefix}-{number}", *details, 1, now()) for number, *details in examples],
         )
 
-    def seed_demo(user_id: int):
+    def seed_demo(user_id: int, examples=DEMO_STUDENTS):
         frame = demo_frame()
         db().executemany(
             """INSERT INTO training_samples(user_id,attendance,quiz_score,assignment_score,midterm_score,previous_score,final_score,source)
                VALUES(?,?,?,?,?,?,?,?)""",
             [(user_id, *row, "demo") for row in frame.itertuples(index=False, name=None)],
         )
-        add_demo_students(user_id, "ST")
+        add_demo_students(user_id, "ST", examples)
         train_and_save(user_id, frame, "demo")
 
     def own_student(student_id: int):
@@ -368,13 +390,17 @@ def create_app(test_config: dict | None = None) -> Flask:
         rows = db().execute(
             """SELECT u.id,u.name,u.email,u.created_at,COUNT(s.id) AS student_count,
                       SUM(CASE WHEN s.is_demo = 1 THEN 1 ELSE 0 END) AS demo_count,
+                      AVG(s.actual_final_score) AS average_final,
                       m.selected_model,m.data_source
                FROM users u LEFT JOIN students s ON s.user_id = u.id
                LEFT JOIN model_runs m ON m.user_id = u.id
                GROUP BY u.id,u.name,u.email,u.created_at,m.selected_model,m.data_source
                ORDER BY u.id DESC"""
         ).fetchall()
-        users = [dict(row) | {"is_demo": row["email"].endswith("@example.invalid")} for row in rows]
+        users = [dict(row) | {
+            "is_demo": row["email"].endswith("@example.invalid"),
+            "average_final": round(float(row["average_final"]), 1) if row["average_final"] is not None else None,
+        } for row in rows]
         query = request.args.get("q", "").strip().lower()[:100]
         visible_users = [user for user in users if query in user["name"].lower() or query in user["email"].lower()]
         return render_template("admin_dashboard.html", users=visible_users, query=query, user_count=len(users),
@@ -398,6 +424,30 @@ def create_app(test_config: dict | None = None) -> Flask:
             return redirect(url_for("admin_dashboard"))
         flash(f"Demo workspace ready. Sign in as {email} with password {password}. Copy these details now; the password is shown only once.", "success")
         return redirect(url_for("admin_user", user_id=user_id))
+
+    @app.post("/admin/load-samples")
+    @admin_required
+    def admin_load_samples():
+        added = 0
+        for name, email, program, sample_students in DEMO_WORKSPACES:
+            if db().execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone():
+                continue
+            examples = [(101 + index, student_name, program, *scores)
+                        for index, (student_name, *scores) in enumerate(sample_students)]
+            try:
+                user_id = db().execute(
+                    "INSERT INTO users(name,email,password_hash,created_at) VALUES(?,?,?,?) RETURNING id",
+                    (name, email, generate_password_hash(secrets.token_urlsafe(24)), now()),
+                ).fetchone()["id"]
+                seed_demo(user_id, examples)
+                added += 1
+            except INTEGRITY_ERRORS:
+                db().rollback()
+                flash("Could not finish loading all sample workspaces. You can try again safely.", "error")
+                return redirect(url_for("admin_dashboard"))
+        flash(f"{added} sample workspaces added with six graded students each." if added
+              else "The four sample workspaces are already available.", "success")
+        return redirect(url_for("admin_dashboard"))
 
     @app.get("/admin/users/<int:user_id>")
     @admin_required
@@ -578,7 +628,7 @@ def create_app(test_config: dict | None = None) -> Flask:
         ).fetchall()
         completed = db().execute(
             """SELECT attendance,quiz_score,assignment_score,midterm_score,previous_score,actual_final_score AS final_score
-               FROM students WHERE user_id = ? AND actual_final_score IS NOT NULL""",
+               FROM students WHERE user_id = ? AND actual_final_score IS NOT NULL AND is_demo = 0""",
             (g.user["id"],),
         ).fetchall()
         frame = pd.DataFrame([[row[column] for column in FEATURES + [TARGET]] for row in [*samples, *completed]], columns=FEATURES + [TARGET])

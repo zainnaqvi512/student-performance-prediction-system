@@ -142,11 +142,15 @@ def test_admin_login_portfolios_and_demo_generation(app):
     assert admin.get("/dashboard").location.endswith("/login")
     assert admin.get("/admin/users/1").status_code == 200
     assert b"Ayesha Khan" in admin.get("/admin/users/1").data
+    assert b"ACTUAL FINAL" in admin.get("/admin/users/1").data
+    assert b"87.0" in admin.get("/admin/users/1").data
 
     response = admin.post("/admin/users/1/demo-students", data={"csrf_token": csrf(admin)}, follow_redirects=True)
     assert b"Six sample students were added" in response.data
-    assert b"12 total" in response.data
+    assert b"12 students" in response.data
     assert teacher.get("/students").data.count(b"Ayesha Khan") >= 2
+    retrained = teacher.post("/training/retrain", data={"csrf_token": csrf(teacher)}, follow_redirects=True)
+    assert b"Model retrained on 240 historical records" in retrained.data
 
     response = admin.post("/admin/demo-workspaces", data={"csrf_token": csrf(admin)}, follow_redirects=True)
     assert b"Demo workspace ready" in response.data
@@ -154,6 +158,19 @@ def test_admin_login_portfolios_and_demo_generation(app):
     assert b"demo-" in response.data
     assert b"Demo Teacher" in admin.get("/admin").data
     assert teacher.get("/admin/users/2").location.endswith("/admin/login")
+
+    loaded = admin.post("/admin/load-samples", data={"csrf_token": csrf(admin)}, follow_redirects=True)
+    assert b"4 sample workspaces added" in loaded.data
+    assert b"Sara Ali" in loaded.data and b"Farhan Ahmed" in loaded.data
+    assert b"24" in loaded.data
+    again = admin.post("/admin/load-samples", data={"csrf_token": csrf(admin)}, follow_redirects=True)
+    assert b"already available" in again.data
+    with app.app_context():
+        import sqlite3
+        with sqlite3.connect(app.config["DATABASE"]) as db:
+            sara_id = db.execute("SELECT id FROM users WHERE email='showcase-sara@example.invalid'").fetchone()[0]
+    sara = admin.get(f"/admin/users/{sara_id}")
+    assert b"Hira Noor" in sara.data and b"91.0" in sara.data
 
     admin.post("/admin/logout", data={"csrf_token": csrf(admin)})
     assert admin.get("/admin").location.endswith("/admin/login")

@@ -8,7 +8,7 @@ Live demo: <https://student-performance-prediction-syst-one.vercel.app/>. It run
 
 Teachers sign up at `/register` and sign in at `/login`. Each teacher sees only their own students, training data, and reports. A new workspace starts with clearly labeled sample students and an illustrative model.
 
-The separate admin sign-in is at `/admin/login`. Admin credentials come from `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` environment variables; the admin route is unavailable until both are configured. The admin console lists teacher workspaces, shows each user's student portfolio and prediction summary, and can create a demo teacher workspace or add six labeled sample students to a selected workspace. Sample generation does not replace existing records or retrain the user's model. The generated demo teacher password is displayed to the admin once.
+The separate admin sign-in is at `/admin/login`. Admin credentials come from `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` environment variables; the admin route is unavailable until both are configured. The admin console lists teacher workspaces, shows each user's student portfolio with attendance, assessment marks, actual final grades, predictions, and risk levels. **Load sample data** creates four distinct example teacher workspaces with 24 graded students; pressing it again does not duplicate them. Admin can also create a demo teacher workspace or add six labeled sample students to a selected workspace. Sample generation does not replace existing records or retrain the user's model. The generated demo teacher password is displayed to the admin once. Sample students are excluded from retraining with completed real student records.
 
 ## Run locally
 
