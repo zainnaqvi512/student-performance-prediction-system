@@ -1,5 +1,7 @@
 # Student Performance Prediction System — Firebase Spark (Free) deployment
 
+**Firebase Project ID:** `student-predictor-zain`
+
 **Status:** This branch is an independent JavaScript/browser implementation and is
 **not** a literal deployment of the original Flask/scikit-learn project on `main`.
 
@@ -30,11 +32,13 @@ Results will differ from the original Python project.
    storing user data.
 5. In **Project settings > Your apps**, register a **Web app**.
 6. Copy its PUBLIC web configuration values into:
-   `firebase-public/firebase-config.js`.
+   `firebase-public/firebase-config.js`. The project ID is already set to
+   `student-predictor-zain`, but you still must replace the example API key,
+   messaging sender ID, app ID, and verify the other web app settings.
    These are browser connection identifiers, not private service credentials.
    Do not add a service-account JSON, admin key, or API token to this file.
 7. Under **Authentication > Settings > Authorized domains**, verify that
-   `PROJECT_ID.web.app` and any custom domain are permitted.
+   `student-predictor-zain.web.app` and any custom domain are permitted.
 
 ## 2. Deploy Firebase Hosting + Firestore rules
 
@@ -48,7 +52,7 @@ cd student-performance-prediction-system
 git switch firebase/spark-frontend
 npm install -g firebase-tools
 firebase login
-firebase deploy --only hosting,firestore --project YOUR_FIREBASE_PROJECT_ID
+firebase deploy --only hosting,firestore --project student-predictor-zain
 ```
 
 Alternatively, download the source archive for this branch, unzip it,
@@ -62,7 +66,7 @@ Firestore rules permit only authenticated owners to access their own records.
 
 **Caution:** A live URL is assigned by Firebase; we cannot infer it until
 Hosting is deployed. Default Hosting domain is usually
-`https://YOUR_PROJECT_ID.web.app`. Verify it in the Firebase Console.
+`https://student-predictor-zain.web.app` (only after successfully deploying). Verify it in the Firebase Console.
 
 ## 3. First use
 
