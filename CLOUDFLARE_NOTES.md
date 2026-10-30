@@ -20,12 +20,13 @@ static directory, `npx wrangler deploy` failed with:
 Use Cloudflare's Python Worker command rather than treating this as a static
 site. In Workers & Pages > the connected project > Settings > Builds, use:
 
-- Build command: `python -m pip install --user uv` (if uv is unavailable)
-- Deploy command: `uv run pywrangler deploy`
-- Root directory: `/`
+- **Production branch for an isolated experiment:** `cloudflare/python-worker-bootstrap` (do not change `main`)
+- **Build command:** `python -m pip install uv`
+- **Deploy command:** `python -m uv run pywrangler deploy`
+- **Root directory:** repository root (usually leave field empty; do not type a subfolder)
+- **Preview command:** `python -m uv run pywrangler preview`, if enabled
 
-If the build environment cannot execute `uv`, install it in the build
-environment and ensure its bin path is available before running pywrangler.
+`python -m uv` avoids guessing whether the `uv` executable is on Cloudflare's PATH. The test branch also has a GitHub Actions check that runs `pywrangler deploy --dry-run` without production secrets.
 
 The Python dependencies are NOT proven compatible with the Pyodide runtime.
 In particular, psycopg, NumPy/SciPy/scikit-learn bundle size, and startup
