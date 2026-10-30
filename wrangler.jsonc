@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "student-performance-prediction",
+  "main": "worker.py",
+  "compatibility_date": "2026-10-31",
+  "compatibility_flags": [
+    "python_workers"
+  ]
+}
