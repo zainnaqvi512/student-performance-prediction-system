@@ -1,0 +1,23 @@
+name: Firebase Spark browser ML tests
+on:
+  push:
+    branches:
+      - firebase/spark-frontend
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate JavaScript syntax
+        run: |
+          node --check firebase-public/ml.mjs
+          node --check firebase-public/app.js
+          node --check firebase-public/firebase-config.js
+      - name: Run browser ML engine tests
+        run: node --test tests/firebase-ml.test.mjs

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122842">
+<meta name="description" content="Student Performance Prediction System — teacher dashboard and browser-based machine-learning demo">
+<title>Student Performance Prediction System</title>
+<link rel="stylesheet" href="/styles.css">
+</head><body>
+<div id="toast" role="status" aria-live="polite"></div>
+<section id="welcome" class="welcome">
+  <div class="brand-hero"><span class="symbol">SP</span><span>Student Performance <b>Prediction System</b></span></div>
+  <main class="welcome-grid">
+    <div class="pitch"><span class="eyebrow">EARLY WARNING • SMARTER INTERVENTION</span>
+      <h1>Know who needs help <em>before</em> final exams.</h1>
+      <p>Record student performance, predict expected final marks, and identify learning risks with three browser-based regression models.</p>
+      <div class="pill-list"><span>✓ Linear Regression</span><span>✓ Decision Tree</span><span>✓ Random Forest</span></div>
+      <div class="notice">Academic demonstration. Synthetic sample data is illustrative and does not establish real-world predictive accuracy.</div>
+    </div>
+    <div class="login-card">
+      <div class="tabs"><button id="sign-in-tab" class="active" type="button">Sign in</button><button id="register-tab" type="button">Create account</button></div>
+      <div id="auth-config-status" class="auth-hint"></div>
+      <form id="auth-form">
+        <label id="name-row" hidden>Full name <input id="auth-name" autocomplete="name" maxlength="80" placeholder="Teacher name"></label>
+        <label>Email address <input id="auth-email" required type="email" autocomplete="email" placeholder="teacher@example.com"></label>
+        <label>Password <input id="auth-password" required type="password" minlength="6" autocomplete="current-password" placeholder="At least 6 characters"></label>
+        <button type="submit" class="primary" id="auth-submit">Sign in</button>
+      </form>
+      <p class="or">or</p>
+      <button id="demo-start" class="secondary wide" type="button">Explore offline demonstration</button>
+      <p class="fine">Demo mode uses local browser storage only. With Firebase configured, registered teachers' records are saved to Firestore.</p>
+    </div>
+  </main>
+</section>
+<div id="workspace" class="app-shell" hidden>
+  <aside class="sidebar">
+    <div class="side-brand"><span class="symbol small">SP</span><span>Student<span class="brand-second">Predict</span></span></div>
+    <div class="side-caption">TEACHER WORKSPACE</div>
+    <nav class="nav" aria-label="Main navigation">
+      <button class="nav-btn active" data-view="overview"><span>◫</span> Overview</button>
+      <button class="nav-btn" data-view="students"><span>▦</span> Students</button>
+      <button class="nav-btn" data-view="training"><span>◈</span> Model training</button>
+      <button class="nav-btn" data-view="reports"><span>▤</span> Reports</button>
+      <button class="nav-btn" data-view="settings"><span>⚙</span> Settings</button>
+    </nav>
+    <div class="side-bottom"><span id="mode-badge" class="mode-tag"></span><button id="signout" class="signout">↪ Sign out / Exit demo</button></div>
+  </aside>
+  <div class="work-area">
+    <header class="topbar"><div><div id="page-eyebrow" class="eyebrow">WORKSPACE OVERVIEW</div><h2 id="page-title">Dashboard</h2></div><div class="identity"><span class="avatar">T</span><span id="teacher-name">Teacher</span></div></header>
+    <div id="banner" class="banner"></div>
+    <main class="content">
+      <section id="view-overview" class="view">
+        <div class="metrics-row">
+          <article class="metric"><span>Total students</span><strong id="count-total">0</strong><small>Managed student records</small></article>
+          <article class="metric"><span>At risk</span><strong id="count-risk">0</strong><small>Predicted score below 50</small></article>
+          <article class="metric"><span>Average</span><strong id="count-average">0</strong><small>Predicted score 50–79.9</small></article>
+          <article class="metric"><span>Excellent</span><strong id="count-excellent">0</strong><small>Predicted score at least 80</small></article>
+        </div>
+        <div class="split-grid">
+          <article class="panel"><div class="panel-head"><div><h3>Model summary</h3><p>Selected by lowest validation MAE</p></div><span class="tag" id="model-source">Illustrative data</span></div>
+            <div class="model-hero"><span>Selected algorithm</span><strong id="summary-model">—</strong><div class="metric-sub"><span id="summary-mae">MAE —</span><span id="summary-r2">R² —</span><span id="summary-count">— samples</span></div></div>
+            <p class="footnote">These are regression scores on a held-out sample; results from synthetic rows are not validated on real students.</p></article>
+          <article class="panel"><div class="panel-head"><div><h3>Quick actions</h3><p>Manage your students and models</p></div></div><div class="quick-actions"><button class="primary" data-action="add-student">＋ Add student</button><button class="secondary" data-go="training">Train / compare models</button><button class="secondary" data-go="reports">Download report</button></div></article>
+        </div>
+        <article class="panel"><div class="panel-head"><div><h3>Student performance snapshot</h3><p>Predictions for the latest records</p></div><button class="text-button" data-go="students">View all →</button></div><div id="snapshot"></div></article>
+      </section>
+      <section id="view-students" class="view" hidden>
+        <article class="panel"><div class="panel-head"><div><h3>Student records</h3><p>Manage five academic inputs and predicted scores</p></div><button class="primary" data-action="add-student">＋ Add student</button></div>
+          <div class="toolbar"><input id="student-search" placeholder="Search student name, ID or program" aria-label="Search students"></div>
+          <div class="table-wrap"><table><thead><tr><th>Student</th><th>Attendance</th><th>Midterm</th><th>Predicted final</th><th>Risk category</th><th>Actions</th></tr></thead><tbody id="student-table"></tbody></table></div>
+        </article>
+      </section>
+      <section id="view-training" class="view" hidden>
+        <div class="split-grid">
+          <article class="panel"><div class="panel-head"><div><h3>Historical training data</h3><p>Upload your own CSV with known final exam marks</p></div></div>
+            <div id="dataset-status" class="dataset-status"></div>
+            <label class="file-select">Choose CSV file<input type="file" id="csv-file" accept=".csv,text/csv"></label>
+            <div class="controls"><button class="primary" id="train-button">Train three algorithms</button><button class="secondary" id="sample-csv">Download sample CSV</button></div>
+            <p class="footnote">Required columns: attendance, quiz_score, assignment_score, midterm_score, previous_score, final_score. Minimum 30 historical rows; all scores 0–100. Missing historical input values are median-imputed.</p>
+          </article>
+          <article class="panel"><div class="panel-head"><div><h3>Evaluation design</h3><p>Keep the hold-out test separate</p></div></div><div class="split-bar"><span>60% Train</span><span>20% Validation</span><span>20% Test</span></div><p class="explanation">We select the model with the smallest validation Mean Absolute Error, evaluate it on unseen test rows, and finally refit the selected model on all available records.</p><div id="train-summary" class="dataset-status"></div></article>
+        </div>
+        <article class="panel"><div class="panel-head"><div><h3>Algorithm comparison</h3><p>Held-out test results. Lower MAE and RMSE are preferable.</p></div></div><div id="model-comparison"></div></article>
+      </section>
+      <section id="view-reports" class="view" hidden>
+        <article class="panel"><div class="panel-head"><div><h3>Download academic report</h3><p>Export your student data and predictions as CSV</p></div></div>
+          <p class="explanation">This report includes scores and academic risk categories. It is generated locally using your current trained browser model.</p>
+          <button class="primary" id="export-report">↓ Download student prediction report</button>
+          <div id="report-stats" class="dataset-status"></div>
+        </article>
+      </section>
+      <section id="view-settings" class="view" hidden>
+        <article class="panel"><h3>Account and environment</h3><div id="environment-info"></div><p class="footnote">Student predictions are decision-support indicators, not guarantees. Do not upload real student records without appropriate privacy approval.</p></article>
+      </section>
+    </main>
+  </div>
+</div>
+<dialog id="student-dialog">
+  <form id="student-form" class="student-form">
+    <div class="dialog-head"><div><div class="eyebrow">STUDENT RECORD</div><h3 id="dialog-title">Add student</h3></div><button type="button" id="close-dialog" class="icon-button" aria-label="Close dialog">×</button></div>
+    <input type="hidden" name="id">
+    <div class="form-grid">
+      <label>Student ID<input name="student_number" required maxlength="30"></label>
+      <label>Student name<input name="name" required maxlength="100"></label>
+      <label class="span-2">Program / Department<input name="program" required maxlength="100" placeholder="Computer Science"></label>
+      <label>Attendance %<input name="attendance" required type="number" min="0" max="100" step=".1"></label>
+      <label>Quiz %<input name="quiz_score" required type="number" min="0" max="100" step=".1"></label>
+      <label>Assignment %<input name="assignment_score" required type="number" min="0" max="100" step=".1"></label>
+      <label>Midterm %<input name="midterm_score" required type="number" min="0" max="100" step=".1"></label>
+      <label>Previous score %<input name="previous_score" required type="number" min="0" max="100" step=".1"></label>
+      <label>Actual final % (optional)<input name="actual_final_score" type="number" min="0" max="100" step=".1"></label>
+    </div>
+    <div class="dialog-actions"><button type="button" class="secondary" id="cancel-dialog">Cancel</button><button type="submit" class="primary" id="save-student">Save record</button></div>
+  </form>
+</dialog>
+<script type="module" src="/app.js"></script>
+</body></html>
