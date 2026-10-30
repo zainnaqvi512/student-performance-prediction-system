@@ -2,6 +2,8 @@
 
 **Firebase Project ID:** `student-predictor-zain`
 
+**Web app configuration:** ✅ added to `firebase-public/firebase-config.js` (provided by project owner). Do not repeat registration or paste the config again. Firebase Authentication, Cloud Firestore creation, Firestore rules deployment, and Hosting publication are still required.
+
 **Status:** This branch is an independent JavaScript/browser implementation and is
 **not** a literal deployment of the original Flask/scikit-learn project on `main`.
 
